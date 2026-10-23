@@ -1264,9 +1264,10 @@ renderer.setAnimationLoop(() => {
     updateHUD();
 
     // Level transition triggers (top-down order to prevent skipping)
-    if (score >= 100 && window.currentLevel !== 'Forest') {
+    // Level thresholds: 500 → Snow, 1000 → Forest, 1500+ → future levels
+    if (score >= 1000 && window.currentLevel !== 'Forest') {
       triggerLevelUp('Forest');
-    } else if (score >= 50 && score < 100 && window.currentLevel === 'Base') {
+    } else if (score >= 500 && score < 1000 && window.currentLevel === 'Base') {
       triggerLevelUp('Snow');
     }
 
