@@ -101,8 +101,9 @@ All third-party assets used in this project are licensed under permissive open l
 
 In compliance with Clause 9(f) of the Challenge Terms and Conditions, the following AI tools and coding assistants were utilized during the development of this submission:
 
-- **JetBrains AI Assistant / Antigravity AI Coding Agent**: Used for architectural scaffolding, code logic implementation (audio manager, pickup collision math, dynamic level generation), CSS styling, refactoring, and automated testing across the project.
-- All gameplay design decisions, creative asset curation, testing, and direction reflect the author's own judgment, effort, and creative input.
+- **Junie (Junie Lite model)**: Utilized as the primary AI coding agent to develop and implement the additional features and game extensions, including the Audio Manager, Collectible Coins, Heart & Shield pickups, Winter & Forest dynamic levels, character selection, HUD design, and Three.js collision and physics integration.
+- **JetBrains AI Assistant / Antigravity AI Coding Agent**: Used for initial architectural scaffolding, project setup, automated unit testing, and compliance verification.
+- All gameplay design decisions, creative direction, asset curation, testing, and debugging reflect the author's own direction, judgment, and effort.
 
 ---
 
