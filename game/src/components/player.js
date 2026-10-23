@@ -8,8 +8,16 @@ import {
   ATTACK_COOLDOWN,
   ATTACK_RADIUS,
 } from './constants.js';
+import { audioManager } from './AudioManager.js';
 
 export const MOVE_DURATION = JUMP_DISTANCE / MOVE_SPEED;
+
+// Character selection configuration
+export const CHARACTERS = [
+  { id: 'normal', name: 'Normal Tode', path: '/models/tode.glb', scale: 28 },
+  { id: 'yellow', name: 'Yellow Frog', path: '/models/YellowFrog.glb', scale: 112 },
+  { id: 'classic', name: 'Classic Frog', path: '/models/Frog.glb', scale: 8 }
+];
 
 // Camera view is at (300, -300, 300) looking at (0, 0, 0)
 export const DIRECTIONS = {
@@ -39,29 +47,152 @@ export function createPlayer(scene) {
 
   let model = null;
   const loader = new GLTFLoader();
-  loader.load('/models/tode.glb', (gltf) => {
-    model = gltf.scene;
-    model.name = 'Tode';
-    model.scale.setScalar(20);
-    model.rotation.x = Math.PI / 2;
+  let currentCharacterIndex = 0;
+  player.baseScale = 28;
+  player.targetScaleMultiplier = 1.0;
 
-    const bounds = new THREE.Box3().setFromObject(model);
-    model.position.z -= bounds.min.z;
+  // Dynamic model loader with strict isolation
+  player.loadModel = function (index) {
+    currentCharacterIndex = index;
+    const config = CHARACTERS[index];
+    player.baseScale = config.scale;
 
-    model.traverse((child) => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-      }
-    });
-
-    visual.add(model);
-    player.model = model;
-    player.visual = visual;
-    if (player.visible !== undefined) {
-      model.visible = player.visible;
+    // STRICT ISOLATION: Completely nuke the old model from memory
+    if (player.model) {
+      visual.remove(player.model);
+      player.model.traverse((child) => {
+        if (child.isMesh) {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+            else child.material.dispose();
+          }
+        }
+      });
+      player.model = null;
     }
+
+
+    loader.load(
+      config.path,
+      (gltf) => {
+        // If the user clicked Next very fast, ignore old downloads
+        if (currentCharacterIndex !== index) return;
+
+        try {
+          const loadedModel = gltf.scene;
+          console.log(`[MODEL LOAD] Success: ${config.name}`, loadedModel);
+
+          loadedModel.name = config.name;
+          loadedModel.scale.setScalar(config.scale);
+          loadedModel.rotation.x = Math.PI / 2;
+
+          // Perfect 3D Centering for the spin animation
+          loadedModel.updateMatrixWorld(true);
+          const bounds = new THREE.Box3().setFromObject(loadedModel);
+          const center = new THREE.Vector3();
+          bounds.getCenter(center);
+
+          // Offset the model so its true center is at (0,0) and its base is at Z=0
+          loadedModel.position.x = -center.x;
+          loadedModel.position.y = -center.y;
+          loadedModel.position.z -= bounds.min.z;
+
+          loadedModel.traverse((child) => {
+            if (child.isMesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+            }
+          });
+
+          visual.add(loadedModel);
+          player.model = loadedModel;
+          if (player.visible !== undefined) {
+            loadedModel.visible = player.visible;
+          }
+          console.log(`[MODEL LOAD] ${config.name} added to scene`);
+        } catch (err) {
+          console.error(`[MODEL PROCESS ERROR] Failed to process ${config.name}:`, err);
+          // Fallback box on processing error
+          const fallbackBox = new THREE.Mesh(
+            new THREE.BoxGeometry(20, 20, 20),
+            new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.8 })
+          );
+          fallbackBox.position.z = 10;
+          visual.add(fallbackBox);
+          player.model = fallbackBox;
+        }
+      },
+      undefined,
+      (error) => {
+        if (currentCharacterIndex !== index) return;
+        console.error(`[MODEL ERROR] Cannot find ${config.path}. Check capitalization!`, error);
+
+        // Bright red error box to indicate a broken file path
+        const errorBox = new THREE.Mesh(
+          new THREE.BoxGeometry(20, 20, 20),
+          new THREE.MeshBasicMaterial({ color: 0xff0000 })
+        );
+        errorBox.position.z = 10;
+        visual.add(errorBox);
+        player.model = errorBox;
+      }
+    );
+  };
+
+
+  // Load default character on startup
+  player.loadModel(0);
+
+  // Shield state variables
+  player.shieldTimer = 0;
+  player.isShielded = () => player.shieldTimer > 0;
+
+  // Ultra Blast state variables
+  let ultraBlast = null;
+  let ultraTimer = 0;
+
+  // Create White Forcefield Bubble — smooth, no wireframe
+  const forcefieldGeo = new THREE.SphereGeometry(60, 32, 32); // Large protection radius
+  const forcefieldMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    emissive: 0x888899,
+    emissiveIntensity: 0.4,
+    transparent: true,
+    opacity: 0.25,
+    wireframe: false
   });
+  const forcefieldMesh = new THREE.Mesh(forcefieldGeo, forcefieldMat);
+  forcefieldMesh.position.z = 15;
+  forcefieldMesh.visible = false;
+  player.add(forcefieldMesh);
+
+  player.activateShield = function() {
+    player.shieldTimer = 10.0; // 10 seconds of invincibility
+    forcefieldMesh.visible = true;
+    audioManager.play('jump'); // Play a sound on pickup
+  };
+
+  // Fire Ultra Blast - massive purple shockwave
+  player.fireUltraBlast = function() {
+    if (ultraBlast) return;
+    
+    // Create a purple ring on the ground
+    const geo = new THREE.RingGeometry(15, 25, 64);
+    const mat = new THREE.MeshBasicMaterial({ 
+      color: 0xa855f7, 
+      transparent: true, 
+      opacity: 1, 
+      side: THREE.DoubleSide 
+    });
+    
+    ultraBlast = new THREE.Mesh(geo, mat);
+    ultraBlast.rotation.x = Math.PI / 2; // Lay it flat
+    ultraBlast.position.z = 2; // Just above the ground
+    
+    player.add(ultraBlast);
+    ultraTimer = 0.6; // Animation lasts 0.6 seconds
+  };
 
   player.enabled = true;
 
@@ -75,6 +206,7 @@ export function createPlayer(scene) {
   let currentMove = null;
   let attackCooldownTimer = 0;
   let activeAttackCircle = null;
+
   let attackCircleTimer = 0;
 
   const attackGeometry = new THREE.CircleGeometry(ATTACK_RADIUS, 32);
@@ -164,6 +296,39 @@ export function createPlayer(scene) {
       }
     }
 
+    // Update Shield Timer and Animation
+    if (player.shieldTimer > 0) {
+      player.shieldTimer -= delta;
+      
+      // Spin and pulse the forcefield
+      forcefieldMesh.rotation.x += delta;
+      forcefieldMesh.rotation.y += delta * 1.5;
+      forcefieldMesh.material.opacity = 0.3 + Math.sin(performance.now() * 0.01) * 0.2;
+
+      if (player.shieldTimer <= 0) {
+        forcefieldMesh.visible = false;
+      }
+    }
+
+    // Animate Ultra Blast Shockwave
+    if (ultraBlast) {
+      ultraTimer -= delta;
+      const progress = 1 - (ultraTimer / 0.6);
+
+      // Scale it up incredibly fast (from 1x to 60x size)
+      ultraBlast.scale.setScalar(1 + progress * 60);
+
+      // THE CRITICAL FIX: Clamp to 0 so negative math doesn't crash the loop
+      ultraBlast.material.opacity = Math.max(0, 1 - Math.pow(progress, 2));
+
+      if (ultraTimer <= 0) {
+        player.remove(ultraBlast);
+        ultraBlast.geometry.dispose();
+        ultraBlast.material.dispose();
+        ultraBlast = null;
+      }
+    }
+
     if (currentMove?.completed) {
       currentMove = null;
     }
@@ -196,6 +361,9 @@ export function createPlayer(scene) {
         startPosition: player.position.clone(),
         duration,
       };
+
+      // Play the frog jump sound
+      audioManager.play('jump');
     }
 
     if (!currentMove) {
