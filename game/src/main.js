@@ -136,8 +136,8 @@ howToPlayModal.innerHTML = `
           <div class="rule-title">Levels</div>
           <ul class="rule-list">
             <li><span class="level-dot base"></span> <strong>Base</strong> — Green world with houses & slimes</li>
-            <li><span class="level-dot snow"></span> <strong>Snow</strong> (50 pts) — Snowy world with dragons</li>
-            <li><span class="level-dot forest"></span> <strong>Forest</strong> (100 pts) — Dark forest with spiders</li>
+            <li><span class="level-dot snow"></span> <strong>Snow</strong> (500 pts) — Snowy world with dragons</li>
+            <li><span class="level-dot forest"></span> <strong>Forest</strong> (1000 pts) — Dark forest with spiders</li>
           </ul>
         </div>
       </div>
